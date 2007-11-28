@@ -2,32 +2,20 @@ local GTTP = {}
 local L = GTTPLocals
 
 local origClicks = {}
-local buttonIndex = 1
 
--- Basically this makes sure we can go off the original text
--- so other mods don't affect it
-local function setButtonText(...)
-	for i=1, select("#", ...), 3 do
-		getglobal("GossipTitleButton" .. buttonIndex).originalText = select(i, ...)
-		buttonIndex = buttonIndex + 1
-	end
+-- Tries to deal with incompatabilities that other mods cause
+local function stripStupid(text)
+	-- Strip [<level crap>] <quest title>
+	text = string.gsub(text, "%[(.+)%]", "")
+	-- Strip color codes
+	text = string.gsub(text, "|cff000000(.+)|r", "%1")
+	-- Strip (low level) at the end of a quest
+	text = string.gsub(text, "(.+) %((.+)%)", "%1")
 	
-	if( buttonIndex > 1 ) then
-		buttonIndex = buttonIndex + 1
-	end
-end
 
-local function setButtonOptionText(...)
-	for i=1, select("#", ...), 2 do
-		getglobal("GossipTitleButton" .. buttonIndex).originalText = select(i, ...)
-		buttonIndex = buttonIndex + 1
-	end
-	
-	if( buttonIndex > 1 ) then
-		buttonIndex = buttonIndex + 1
-	end
+	text = string.trim(text)
+	return text
 end
-
 
 function GTTP:Print(msg)
 	DEFAULT_CHAT_FRAME:AddMessage("|cFF33FF99GTTP|r: " .. msg)
@@ -41,13 +29,6 @@ function GTTP:Initialize()
 	if( not GTTPDB ) then
 		GTTPDB = { enabled = true }
 	end
-
-	hooksecurefunc("GossipFrameAvailableQuestsUpdate", setButtonText)
-	hooksecurefunc("GossipFrameActiveQuestsUpdate", setButtonText)
-	hooksecurefunc("GossipFrameOptionsUpdate", setButtonOptionText)
-	hooksecurefunc("GossipFrameUpdate", function()
-		buttonIndex = 1
-	end)
 	
 	-- Merge all the default quest things in
 	for type, quests in pairs(GTTPQuests) do
@@ -70,13 +51,15 @@ local function gossipOnClick(self, ...)
 	-- Adding a new skip
 	if( IsAltKeyDown() ) then
 		-- If it already exists, remove it
-		local questName = string.lower(self.originalText)
+		local text = stripStupid(self:GetText())
+		local questName = string.lower(text)
+		
 		for type, quests in pairs(GTTP_List) do
 			if( not GTTPDB[type] and quests[questName] ) then
 				if( self.type ~= "Gossip" ) then
-					GTTP:Print(string.format(L["No longer auto turning in %s."], self.originalText))
+					GTTP:Print(string.format(L["No longer auto turning in %s."], text))
 				else
-					GTTP:Print(string.format(L["No longer auto skipping %s."], self.originalText))
+					GTTP:Print(string.format(L["No longer auto skipping %s."], text))
 				end
 				
 				-- Manual can be removed fine, others won't since we want them disabled but not re-enabled
@@ -92,10 +75,10 @@ local function gossipOnClick(self, ...)
 		end
 		
 		if( self.type ~= "Gossip" ) then
-			GTTP:Print(string.format(L["Now auto turning in %s. Hold ALT and click the option again to remove it."], self.originalText))
+			GTTP:Print(string.format(L["Now auto turning in %s. Hold ALT and click the option again to remove it."], text))
 			GTTP_List["manual"][questName] = {checkItems = true}
 		else
-			GTTP:Print(string.format(L["Now auto skipping %s. Hold ALT and click the option again to remove it."], self.originalText))
+			GTTP:Print(string.format(L["Now auto skipping %s. Hold ALT and click the option again to remove it."], text))
 			GTTP_List["manual"][questName] = true
 		end
 		return
@@ -111,27 +94,39 @@ function GTTP:GOSSIP_SHOW()
 	end
 	
 	for i=1, GossipFrame.buttonIndex do
-		local button = getglobal("GossipTitleButton" .. i)
-		
+		local button = getglobal("GossipTitleButton" .. i)		
 		if( not origClicks["GossipTitleButton" .. i] ) then
 			origClicks["GossipTitleButton" .. i] = button:GetScript("OnClick")
 			button:SetScript("OnClick", gossipOnClick)
 		end
-
+				
 		-- Make sure it's a quest we want to skip, and that it's the highest one
 		-- So for things like Alterac Valley crystal turn ins
 		-- will choose the one with 5 crystals not 1 if need be
-		if( button.originalText and self:IsAutoQuest(button.originalText) ) then
-			if( button.type == "Available" ) then
-				SelectGossipAvailableQuest(i)
-			elseif( button.type == "Active" ) then
-				SelectGossipActiveQuest(i)
+		if( button:IsVisible() and self:IsAutoQuest(stripStupid(button:GetText())) ) then
+			button:Click()
+		end
+	end
+end
+
+-- Do skipping for quest types of frames
+local function updateQuestIcons()
+	if( not QuestFrameGreetingPanel:IsVisible() ) then
+		return
+	end
+	
+	for i=1, GetNumActiveQuests() do
+		local button = getglobal("QuestTitleButton" .. i)
+		if( button:IsVisible() ) then
+			if( button.isActive == 1 ) then
+				checkQuestText(button.originalText, (button:GetRegions()))
 			else
-				SelectGossipOption(i)
+				SetDesaturation((button:GetRegions()), nil)
 			end
 		end
 	end
 end
+
 
 -- Figure out if we need to auto skip this too!
 function GTTP:QUEST_PROGRESS()
@@ -139,18 +134,19 @@ function GTTP:QUEST_PROGRESS()
 		return
 	end
 	
+	-- Check if we need to find items
+	local data, questType
+	local questName = string.lower(GetTitleText())
+
+	for catType, quests in pairs(GTTP_List) do
+		if( quests[questName] and type(quests[questName]) == "table" and quests[questName].checkItems ) then
+			questType = catType
+			break
+		end
+	end
+	
 	-- It's got items, do we need to scan them?
 	if( GetNumQuestItems() > 0 ) then
-		local data, questType
-		local questName = string.lower(GetTitleText())
-		
-		for catType, quests in pairs(GTTP_List) do
-			if( quests[questName] ) then
-				questType = catType
-				break
-			end
-		end
-		
 		if( questType ) then
 			local items
 			
@@ -181,6 +177,8 @@ function GTTP:QUEST_PROGRESS()
 				GTTP_List[questType][questName] = items
 			end
 		end
+	elseif( questType ) then
+		GTTP_List[questType][questName] = true
 	end
 	
 	-- Alright! Complete
