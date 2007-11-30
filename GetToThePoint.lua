@@ -11,7 +11,6 @@ local function stripStupid(text)
 	text = string.gsub(text, "|cff000000(.+)|r", "%1")
 	-- Strip (low level) at the end of a quest
 	text = string.gsub(text, "(.+) %((.+)%)", "%1")
-	
 
 	text = string.trim(text)
 	return text
@@ -99,7 +98,7 @@ function GTTP:GOSSIP_SHOW()
 			origClicks["GossipTitleButton" .. i] = button:GetScript("OnClick")
 			button:SetScript("OnClick", gossipOnClick)
 		end
-				
+		
 		-- Make sure it's a quest we want to skip, and that it's the highest one
 		-- So for things like Alterac Valley crystal turn ins
 		-- will choose the one with 5 crystals not 1 if need be
@@ -159,7 +158,6 @@ function GTTP:QUEST_PROGRESS()
 
 				if( itemLink ) then
 					local itemid = string.match(itemLink, "|c.+|Hitem:([0-9]+):(.+)|h%[(.+)%]|h|r")
-					
 					itemid = tonumber(itemid)
 					
 					if( itemid ) then
@@ -188,7 +186,17 @@ function GTTP:QUEST_PROGRESS()
 end
 
 function GTTP:QUEST_COMPLETE()
-	if( GTTPDB.enabled and IsQuestCompletable() and self:IsAutoQuest(GetTitleText()) ) then
+	-- Unflag the quest as an item check so it can be auto completed
+
+	local questName = string.lower(GetTitleText())
+	for catType, quests in pairs(GTTP_List) do
+		if( quests[questName] and type(quests[questName]) == "table" and quests[questName].checkItems ) then
+			quests[questName] = true
+			break
+		end
+	end
+	
+	if( GTTPDB.enabled and IsQuestCompletable() and GetNumQuestChoices() == 0 and self:IsAutoQuest(GetTitleText()) ) then
 		QuestFrameCompleteQuestButton:Click()
 	end
 end
