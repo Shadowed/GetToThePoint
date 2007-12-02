@@ -25,6 +25,7 @@ GTTPQuests = {
 		["Call of Air - Mulverick's Fleet"] = {[17328] = 1},
 
 		["More Armor Scraps"] = {[17422] = 20},
+		["More Booty!"] = {[17422] = 20},
 
 		["Coldtooth Supplies"] = {[17542] = 10},
 		["Irondeep Supplies"] = {[17522] = 10},

@@ -104,6 +104,7 @@ function GTTP:GOSSIP_SHOW()
 		-- will choose the one with 5 crystals not 1 if need be
 		if( button:IsVisible() and self:IsAutoQuest(stripStupid(button:GetText())) ) then
 			button:Click()
+			break
 		end
 	end
 end
