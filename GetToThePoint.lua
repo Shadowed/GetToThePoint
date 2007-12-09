@@ -2,9 +2,16 @@ local GTTP = {}
 local L = GTTPLocals
 
 local origClicks = {}
+local questList = {}
 
 -- Tries to deal with incompatabilities that other mods cause
 local function stripStupid(text)
+	if( not text ) then
+		return nil
+
+	end
+	
+
 	-- Strip [<level crap>] <quest title>
 	text = string.gsub(text, "%[(.+)%]", "")
 	-- Strip color codes
@@ -52,33 +59,42 @@ local function gossipOnClick(self, ...)
 		-- If it already exists, remove it
 		local text = stripStupid(self:GetText())
 		local questName = string.lower(text)
+		local questType = "manual"
 		
 		for type, quests in pairs(GTTP_List) do
-			if( not GTTPDB[type] and quests[questName] ) then
-				if( self.type ~= "Gossip" ) then
-					GTTP:Print(string.format(L["No longer auto turning in %s."], text))
-				else
-					GTTP:Print(string.format(L["No longer auto skipping %s."], text))
+			if( quests[questName] ~= nil ) then
+				-- If it's not false, it's still being used
+				if( quests[questName] ~= false ) then
+					if( self.type ~= "Gossip" ) then
+						GTTP:Print(string.format(L["No longer auto turning in %s."], text))
+					else
+						GTTP:Print(string.format(L["No longer auto skipping %s."], text))
+					end
+
+					-- Manual can be removed fine, others won't since we want them disabled but not re-enabled
+					-- on next log in from a merge
+					if( type == "manual" ) then
+						quests[questName] = nil
+					else
+						quests[questName] = false
+					end
+					
+					return
 				end
 				
-				-- Manual can be removed fine, others won't since we want them disabled but not re-enabled
-				-- on next log in from a merge
-				if( type == "manual" ) then
-					quests[questName] = nil
-				else
-					quests[questName] = false
-				end
-				
-				return
+				-- Otherwise, we (may) have this quest already
+				-- or we're changing the status of a quest we added ourself
+				questType = type
+				break
 			end
 		end
 		
 		if( self.type ~= "Gossip" ) then
 			GTTP:Print(string.format(L["Now auto turning in %s. Hold ALT and click the option again to remove it."], text))
-			GTTP_List["manual"][questName] = {checkItems = true}
+			GTTP_List[type][questName] = {checkItems = true}
 		else
 			GTTP:Print(string.format(L["Now auto skipping %s. Hold ALT and click the option again to remove it."], text))
-			GTTP_List["manual"][questName] = true
+			GTTP_List[type][questName] = true
 		end
 		return
 	end
@@ -92,41 +108,32 @@ function GTTP:GOSSIP_SHOW()
 		return
 	end
 	
+	-- Recycle
+	for k in pairs(questList) do
+		questList[k] = nil
+	end
+	
+	-- List all available quests
 	for i=1, GossipFrame.buttonIndex do
 		local button = getglobal("GossipTitleButton" .. i)		
 		if( not origClicks["GossipTitleButton" .. i] ) then
 			origClicks["GossipTitleButton" .. i] = button:GetScript("OnClick")
 			button:SetScript("OnClick", gossipOnClick)
 		end
-		
-		-- Make sure it's a quest we want to skip, and that it's the highest one
-		-- So for things like Alterac Valley crystal turn ins
-		-- will choose the one with 5 crystals not 1 if need be
-		if( button:IsVisible() and self:IsAutoQuest(stripStupid(button:GetText())) ) then
-			button:Click()
-			break
-		end
-	end
-end
 
--- Do skipping for quest types of frames
-local function updateQuestIcons()
-	if( not QuestFrameGreetingPanel:IsVisible() ) then
-		return
+		if( button:IsVisible() ) then
+			questList[stripStupid(button:GetText())] = button
+		end
 	end
 	
-	for i=1, GetNumActiveQuests() do
-		local button = getglobal("QuestTitleButton" .. i)
-		if( button:IsVisible() ) then
-			if( button.isActive == 1 ) then
-				checkQuestText(button.originalText, (button:GetRegions()))
-			else
-				SetDesaturation((button:GetRegions()), nil)
-			end
+	-- Now see what to auto skip
+	for name, button in pairs(questList) do
+		if( self:IsAutoQuest(name, questList) ) then
+			button:Click()
+			return
 		end
 	end
 end
-
 
 -- Figure out if we need to auto skip this too!
 function GTTP:QUEST_PROGRESS()
@@ -181,7 +188,7 @@ function GTTP:QUEST_PROGRESS()
 	end
 	
 	-- Alright! Complete
-	if( IsQuestCompletable() and self:IsAutoQuest(GetTitleText()) ) then
+	if( IsQuestCompletable() and self:IsAutoQuest(GetTitleText(), questList) ) then
 		QuestFrameCompleteButton:Click()
 	end
 end
@@ -197,14 +204,14 @@ function GTTP:QUEST_COMPLETE()
 		end
 	end
 	
-	if( GTTPDB.enabled and IsQuestCompletable() and GetNumQuestChoices() == 0 and self:IsAutoQuest(GetTitleText()) ) then
+	if( GTTPDB.enabled and IsQuestCompletable() and GetNumQuestChoices() == 0 and self:IsAutoQuest(GetTitleText(), questList) ) then
 		QuestFrameCompleteQuestButton:Click()
 	end
 end
 
 -- Figure out if it's an auto turn in quest
 -- and if we can actually complete it
-function GTTP:IsAutoQuest(name)
+function GTTP:IsAutoQuest(name, questList)
 	if( not name ) then
 		return nil
 	end
@@ -217,7 +224,6 @@ function GTTP:IsAutoQuest(name)
 	for catType, quests in pairs(GTTP_List) do
 		if( not GTTPDB[catType] and quests[name] ) then
 			local data = quests[name]
-			
 			-- No item requirements, so can exit quickly
 			if( type(data) ~= "table" ) then
 				return true
@@ -238,17 +244,19 @@ function GTTP:IsAutoQuest(name)
 			break
 		end
 	end
-	
+		
 	-- Cannot find any quest, or it's disabled
 	if( not questName ) then
 		return nil
 	end
-	
+		
 	-- I'm fairly sure theres a better way to do this, need to improve it later
 	for catType, quests in pairs(GTTP_List) do
 		if( not GTTPDB[catType] ) then
 			for name, data in pairs(quests) do
-				if( name ~= questName and type(data) == "table" and not data.checkItems ) then
+				-- Make sure we aren't checking our own quest, that we have actual items
+				-- and that we either don't have a filter, or the quest is in the filter list
+				if( name ~= questName and type(data) == "table" and not data.checkItems and ( not questList or questList[name] ) ) then
 					local required = 0
 					local found = 0
 					
@@ -269,7 +277,7 @@ function GTTP:IsAutoQuest(name)
 			end
 		end
 	end
-
+	
 	return true
 end
 

@@ -26,6 +26,8 @@ GTTPQuests = {
 
 		["More Armor Scraps"] = {[17422] = 20},
 		["More Booty!"] = {[17422] = 20},
+		["Enemy Booty"] = {[17422] = 20},
+		["Armor Scraps"] = {[17422] = 20},
 
 		["Coldtooth Supplies"] = {[17542] = 10},
 		["Irondeep Supplies"] = {[17522] = 10},
