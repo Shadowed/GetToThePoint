@@ -79,7 +79,7 @@ end
 
 -- Check if we need to auto skip
 function GTTP:GOSSIP_SHOW()
-	if( not GTTPDB.enabled or not GossipFrame.buttonIndex or IsShiftKeyDown() ) then
+	if( not GossipFrame.buttonIndex or IsShiftKeyDown() ) then
 		return
 	end
 	
@@ -112,7 +112,7 @@ end
 
 -- Figure out if we need to auto skip this too!
 function GTTP:QUEST_PROGRESS()
-	if( not GTTPDB.enabled or IsShiftKeyDown() ) then
+	if( IsShiftKeyDown() ) then
 		return
 	end
 	
@@ -171,7 +171,7 @@ function GTTP:QUEST_COMPLETE()
 		data = true
 	end
 	
-	if( GTTPDB.enabled and IsQuestCompletable() and GetNumQuestChoices() == 0 and self:IsAutoQuest(GetTitleText(), questList) ) then
+	if( IsQuestCompletable() and GetNumQuestChoices() == 0 and self:IsAutoQuest(GetTitleText(), questList) ) then
 		QuestFrameCompleteQuestButton:Click()
 	end
 end
