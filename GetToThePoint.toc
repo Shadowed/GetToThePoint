@@ -1,12 +1,8 @@
 ## Interface: 20300
 ## Title: Get To The Point
 ## Notes: Helps automate gossip/quest/reputation options for auto turning in and skipping
-## SavedVariables: GTTP_List, GTTPDB
+## SavedVariables: GTTP_List
 ## Author: Mayen
 ## Version: $Revision$
-
-localization.enUS.lua
-localization.deDE.lua
-localization.frFR.lua
 
 GetToThePoint.lua

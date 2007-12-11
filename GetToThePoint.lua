@@ -1,26 +1,24 @@
 local GTTP = {}
-local L = GTTPLocals
-
 local origClicks = {}
 local questList = {}
 
+local L = {
+	["No longer auto turning in %s."] = "No longer auto turning in %s.",
+	["No longer auto skipping %s."] = "No longer auto skipping %s.",
+	
+	["Now auto skipping %s. Hold ALT and click the option again to remove it."] = "Now auto skipping %s. Hold ALT and click the option again to remove it.",
+	["Now auto turning in %s. Hold ALT and click the option again to remove it."] = "Now auto turning in %s. Hold ALT and click the option again to remove it.",
+}
+
 -- Tries to deal with incompatabilities that other mods cause
 local function stripStupid(text)
-	if( not text ) then
-		return nil
-
-	end
-	
-
 	-- Strip [<level crap>] <quest title>
 	text = string.gsub(text, "%[(.+)%]", "")
 	-- Strip color codes
 	text = string.gsub(text, "|cff000000(.+)|r", "%1")
 	-- Strip (low level) at the end of a quest
 	text = string.gsub(text, "(.+) %((.+)%)", "%1")
-
-	text = string.trim(text)
-	return text
+	return string.trim(text)
 end
 
 function GTTP:Print(msg)
@@ -29,73 +27,50 @@ end
 
 function GTTP:Initialize()
 	if( not GTTP_List ) then
-		GTTP_List = { ["manual"] = {} }
-	end
-
-	if( not GTTPDB ) then
-		GTTPDB = { enabled = true }
+		GTTP_List = {}
 	end
 	
-	-- Merge all the default quest things in
-	for type, quests in pairs(GTTPQuests) do
-		if( not GTTP_List[type] ) then
-			GTTP_List[type] = {}
-		end
-
-		-- Check if any new quests need to be added into the list
-		for name, data in pairs(quests) do
-			name = string.lower(name)
-			if( GTTP_List[type][name] == nil ) then
-				GTTP_List[type][name] = data
+	-- Upgrade
+	if( type(GTTP_List.manual) == "table" ) then
+		local newList = {}
+		for _, quests in pairs(GTTP_List) do
+			for name, data in pairs(quests) do
+				newList[name] = data
 			end
 		end
+		
+		GTTP_List = newList
 	end
 end
 
 -- Auto skip gossip
 local function gossipOnClick(self, ...)
 	-- Adding a new skip
-	if( IsAltKeyDown() ) then
+	if( IsAltKeyDown() and self:GetText() ) then
 		-- If it already exists, remove it
 		local text = stripStupid(self:GetText())
 		local questName = string.lower(text)
-		local questType = "manual"
 		
-		for type, quests in pairs(GTTP_List) do
-			if( quests[questName] ~= nil ) then
-				-- If it's not false, it's still being used
-				if( quests[questName] ~= false ) then
-					if( self.type ~= "Gossip" ) then
-						GTTP:Print(string.format(L["No longer auto turning in %s."], text))
-					else
-						GTTP:Print(string.format(L["No longer auto skipping %s."], text))
-					end
-
-					-- Manual can be removed fine, others won't since we want them disabled but not re-enabled
-					-- on next log in from a merge
-					if( type == "manual" ) then
-						quests[questName] = nil
-					else
-						quests[questName] = false
-					end
-					
-					return
-				end
-				
-				-- Otherwise, we (may) have this quest already
-				-- or we're changing the status of a quest we added ourself
-				questType = type
-				break
+		if( GTTP_List[questName] ) then
+			if( self.type ~= "Gossip" ) then
+				GTTP:Print(string.format(L["No longer auto turning in %s."], text))
+			else
+				GTTP:Print(string.format(L["No longer auto skipping %s."], text))
 			end
+			
+			GTTP_List[questName] = nil
+		
+		-- Gossip doesn't have item requirements
+		elseif( self.type == "Gossip" ) then
+			GTTP:Print(string.format(L["Now auto skipping %s. Hold ALT and click the option again to remove it."], text))
+			GTTP_List[questName] = true
+
+		-- It's not gossip, so it could possibly have item requirements
+		else
+			GTTP:Print(string.format(L["Now auto turning in %s. Hold ALT and click the option again to remove it."], text))
+			GTTP_List[questName] = {checkItems = true}
 		end
 		
-		if( self.type ~= "Gossip" ) then
-			GTTP:Print(string.format(L["Now auto turning in %s. Hold ALT and click the option again to remove it."], text))
-			GTTP_List[type][questName] = {checkItems = true}
-		else
-			GTTP:Print(string.format(L["Now auto skipping %s. Hold ALT and click the option again to remove it."], text))
-			GTTP_List[type][questName] = true
-		end
 		return
 	end
 	
@@ -121,8 +96,8 @@ function GTTP:GOSSIP_SHOW()
 			button:SetScript("OnClick", gossipOnClick)
 		end
 
-		if( button:IsVisible() ) then
-			questList[stripStupid(button:GetText())] = button
+		if( button:IsVisible() and button:GetText() ) then
+			questList[string.lower(stripStupid(button:GetText()))] = button
 		end
 	end
 	
@@ -142,19 +117,12 @@ function GTTP:QUEST_PROGRESS()
 	end
 	
 	-- Check if we need to find items
-	local data, questType
 	local questName = string.lower(GetTitleText())
 
-	for catType, quests in pairs(GTTP_List) do
-		if( quests[questName] and type(quests[questName]) == "table" and quests[questName].checkItems ) then
-			questType = catType
-			break
-		end
-	end
-	
 	-- It's got items, do we need to scan them?
 	if( GetNumQuestItems() > 0 ) then
-		if( questType ) then
+		local data = GTTP_List[questName]
+		if( type(data) == "table" and data.checkItems ) then
 			local items
 			
 			-- Store how many we need, and the itemid for next time
@@ -163,11 +131,10 @@ function GTTP:QUEST_PROGRESS()
 			-- for every quest in-game
 			for i=1, GetNumQuestItems() do
 				local itemLink = GetQuestItemLink("required", i)
-
 				if( itemLink ) then
 					local itemid = string.match(itemLink, "|c.+|Hitem:([0-9]+):(.+)|h%[(.+)%]|h|r")
-					itemid = tonumber(itemid)
 					
+					itemid = tonumber(itemid)
 					if( itemid ) then
 						if( not items ) then
 							items = {}
@@ -180,11 +147,13 @@ function GTTP:QUEST_PROGRESS()
 			
 			-- If we found no items...and it has items, something bad happened
 			if( items ) then
-				GTTP_List[questType][questName] = items
+				GTTP_List[questName] = items
 			end
 		end
-	elseif( questType ) then
-		GTTP_List[questType][questName] = true
+		
+	-- No items required
+	elseif( GTTP_List[questName] ) then
+		GTTP_List[questName] = true
 	end
 	
 	-- Alright! Complete
@@ -195,13 +164,11 @@ end
 
 function GTTP:QUEST_COMPLETE()
 	-- Unflag the quest as an item check so it can be auto completed
-
 	local questName = string.lower(GetTitleText())
-	for catType, quests in pairs(GTTP_List) do
-		if( quests[questName] and type(quests[questName]) == "table" and quests[questName].checkItems ) then
-			quests[questName] = true
-			break
-		end
+	local data = GTTP_List[questName]
+	if( type(data) == "table" and data.checkItems ) then
+
+		data = true
 	end
 	
 	if( GTTPDB.enabled and IsQuestCompletable() and GetNumQuestChoices() == 0 and self:IsAutoQuest(GetTitleText(), questList) ) then
@@ -217,63 +184,52 @@ function GTTP:IsAutoQuest(name, questList)
 	end
 	
 	name = string.lower(name)
-
-	local questName
-	local highestItems
 	
-	for catType, quests in pairs(GTTP_List) do
-		if( not GTTPDB[catType] and quests[name] ) then
-			local data = quests[name]
-			-- No item requirements, so can exit quickly
-			if( type(data) ~= "table" ) then
-				return true
-			elseif( data.checkItems ) then
-				return nil
-			end
-			
-			-- Make sure we have the items required for this quest
-			for itemid, quantity in pairs(data) do
-				if( GetItemCount(itemid) < quantity ) then
-					return nil
-				end
-			end
-			
-			-- Alright, make sure we have enough items
-			questName = name
-			highestItems = data
-			break
-		end
-	end
-		
-	-- Cannot find any quest, or it's disabled
-	if( not questName ) then
+	local data = GTTP_List[name]
+	if( not data ) then
 		return nil
 	end
+	
+	-- No item requirements, so can exit quickly
+	if( type(data) ~= "table" ) then
+		return true
+	
+	-- Need to check items still so don't auto complete
+	elseif( data.checkItems ) then
+		return nil
+	end
+
+	-- Make sure we have the items required for this quest
+	for itemid, quantity in pairs(data) do
+		if( GetItemCount(itemid) < quantity ) then
+			return nil
+		end
+	end
+
+	-- Alright, make sure we have enough items
+	local questName = name
+	local highestItems = data
 		
 	-- I'm fairly sure theres a better way to do this, need to improve it later
-	for catType, quests in pairs(GTTP_List) do
-		if( not GTTPDB[catType] ) then
-			for name, data in pairs(quests) do
-				-- Make sure we aren't checking our own quest, that we have actual items
-				-- and that we either don't have a filter, or the quest is in the filter list
-				if( name ~= questName and type(data) == "table" and not data.checkItems and ( not questList or questList[name] ) ) then
-					local required = 0
-					local found = 0
-					
-					-- Check it against our saved quests
-					for itemid, quantity in pairs(data) do
-						required = required + 1
+	for name, data in pairs(GTTP_List) do
+		-- Make sure we aren't checking our own quest, that we have actual items
+		-- and that we either don't have a filter, or the quest is in the filter list
+		if( name ~= questName and type(data) == "table" and not data.checkItems and ( not questList or ( questList and questList[name] ) ) ) then
+			local required = 0
+			local found = 0
 
-						if( highestItems[itemid] and quantity >= highestItems[itemid] and GetItemCount(itemid) >= quantity ) then
-							found = found + 1
-						end
-					end
-										
-					-- This quest is higher then ours, so don't auto accept
-					if( found >= required ) then
-						return nil
-					end
+			-- Check it against our saved quests
+			for itemid, quantity in pairs(data) do
+				required = required + 1
+
+				if( highestItems[itemid] and quantity >= highestItems[itemid] and GetItemCount(itemid) >= quantity ) then
+					found = found + 1
 				end
+			end
+
+			-- This quest is higher then ours, so don't auto accept
+			if( found >= required ) then
+				return nil
 			end
 		end
 	end
