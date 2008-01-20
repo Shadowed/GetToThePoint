@@ -1,7 +1,7 @@
 ## Interface: 20300
 ## Title: Get To The Point
 ## Notes: Helps automate gossip/quest/reputation options for auto turning in and skipping
-## SavedVariables: GTTP_List
+## SavedVariables: GTTP_List, GTTP_Accept
 ## Author: Mayen
 ## Version: $Revision$
 

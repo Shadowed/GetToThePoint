@@ -2,12 +2,17 @@ local GTTP = {}
 local origClicks = {}
 local questList = {}
 
+local CT_SUPPORT = true
+local CT_COLOR = {r = 1.0, g = 0.47, b = 0.039}
+
 local L = {
-	["No longer auto turning in %s."] = "No longer auto turning in %s.",
-	["No longer auto skipping %s."] = "No longer auto skipping %s.",
+	["No longer auto turning in \"%s\"."] = "No longer auto turning in \"%s\".",
+	["No longer auto skipping \"%s\"."] = "No longer auto skipping \"%s\".",
+	["No longer auto accepting \"%s\"."] = "No longer auto accepting \"%s\".",
 	
-	["Now auto skipping %s. Hold ALT and click the option again to remove it."] = "Now auto skipping %s. Hold ALT and click the option again to remove it.",
-	["Now auto turning in %s. Hold ALT and click the option again to remove it."] = "Now auto turning in %s. Hold ALT and click the option again to remove it.",
+	["Now auto accepting \"%s\". Hold CTRL and click the option again to stop auto accepting."] = "Now auto accepting \"%s\". Hold CTRL and click the option again to stop auto accepting.",
+	["Now auto skipping \"%s\". Hold ALT and click the option again to remove it."] = "Now auto skipping \"%s\". Hold ALT and click the option again to remove it.",
+	["Now auto turning in \"%s\". Hold ALT and click the option again to remove it."] = "Now auto turning in \"%s\". Hold ALT and click the option again to remove it.",
 }
 
 -- Tries to deal with incompatabilities that other mods cause
@@ -30,6 +35,10 @@ function GTTP:Initialize()
 		GTTP_List = {}
 	end
 	
+	if( not GTTP_Accept ) then
+		GTTP_Accept = {}
+	end
+	
 	-- Upgrade
 	if( type(GTTP_List.manual) == "table" ) then
 		local newList = {}
@@ -41,7 +50,52 @@ function GTTP:Initialize()
 		
 		GTTP_List = newList
 	end
+	
+	-- Hook for auto turnin
+	local orig_QuestAccept = QuestFrameAcceptButton:GetScript("OnClick")
+	QuestFrameAcceptButton:SetScript("OnClick", function(self, ...)
+		if( IsControlKeyDown() and GetTitleText() ) then
+			local text = stripStupid(GetTitleText())
+			local questName = string.lower(text)
+
+			if( GTTP_Accept[questName] ) then
+				GTTP:Print(string.format(L["No longer auto accepting \"%s\"."], text))
+				GTTP_Accept[questName] = nil
+			else
+				GTTP:Print(string.format(L["Now auto accepting \"%s\". Hold CTRL and click the option again to stop auto accepting."], text))
+				GTTP_Accept[questName] = true		
+			end
+			return
+		end
+	
+
+		if( orig_QuestAccept ) then
+			orig_QuestAccept(self, ...)
+		end
+	end)
 end
+
+--[[
+function GTTP:CombatText(text, color)	
+	-- SCT
+	if( IsAddOnLoaded("sct") ) then
+		SCT:DisplayText(text, color, nil, "event", 1)
+	
+	-- MSBT
+	elseif( IsAddOnLoaded("MikScrollingBattleText") ) then
+		MikSBT.DisplayMessage(text, MikSBT.DISPLAYTYPE_NOTIFICATION, false, color.r * 255, color.g * 255, color.b * 255)		
+	
+	-- Blizzard custom text
+	elseif( IsAddOnLoaded("Blizzard_CombatText") ) then
+		-- Haven't cached the movement function yet
+		if( not COMBAT_TEXT_SCROLL_FUNCTION ) then
+			CombatText_UpdateDisplayedMessages()
+		end
+		
+		CombatText_AddMessage(text, COMBAT_TEXT_SCROLL_FUNCTION, color.r, color.g, color.b)
+	end
+end
+]]
 
 -- Auto skip gossip
 local function gossipOnClick(self, ...)
@@ -53,22 +107,37 @@ local function gossipOnClick(self, ...)
 		
 		if( GTTP_List[questName] ) then
 			if( self.type ~= "Gossip" ) then
-				GTTP:Print(string.format(L["No longer auto turning in %s."], text))
+				GTTP:Print(string.format(L["No longer auto turning in \"%s\"."], text))
 			else
-				GTTP:Print(string.format(L["No longer auto skipping %s."], text))
+				GTTP:Print(string.format(L["No longer auto skipping \"%s\"."], text))
 			end
 			
 			GTTP_List[questName] = nil
 		
 		-- Gossip doesn't have item requirements
 		elseif( self.type == "Gossip" ) then
-			GTTP:Print(string.format(L["Now auto skipping %s. Hold ALT and click the option again to remove it."], text))
+			GTTP:Print(string.format(L["Now auto skipping \"%s\". Hold ALT and click the option again to remove it."], text))
 			GTTP_List[questName] = true
 
 		-- It's not gossip, so it could possibly have item requirements
 		else
-			GTTP:Print(string.format(L["Now auto turning in %s. Hold ALT and click the option again to remove it."], text))
+			GTTP:Print(string.format(L["Now auto turning in \"%s\". Hold ALT and click the option again to remove it."], text))
 			GTTP_List[questName] = {checkItems = true}
+		end
+		
+		return
+	
+	-- Adding new auto acception
+	elseif( IsControlKeyDown() and self:GetText() and self.type ~= "Gossip" ) then
+		local text = stripStupid(self:GetText())
+		local questName = string.lower(text)
+		
+		if( GTTP_Accept[questName] ) then
+			GTTP:Print(string.format(L["No longer auto accepting \"%s\"."], text))
+			GTTP_Accept[questName] = nil
+		else
+			GTTP:Print(string.format(L["Now auto accepting \"%s\". Hold CTRL and click the option again to stop auto accepting."], text))
+			GTTP_Accept[questName] = true		
 		end
 		
 		return
@@ -103,8 +172,15 @@ function GTTP:GOSSIP_SHOW()
 	
 	-- Now see what to auto skip
 	for name, button in pairs(questList) do
-		if( self:IsAutoQuest(name, questList) ) then
-			button:Click()
+		if( self:IsAutoQuest(name, questList) or (button.type == "Available" and GTTP_Accept[name]) ) then
+			if( button.type == "Available" ) then
+				SelectGossipAvailableQuest(button:GetID())
+			elseif( button.type == "Active" ) then
+				SelectGossipActiveQuest(button:GetID())
+			else
+				SelectGossipOption(button:GetID())
+			end
+			
 			return
 		end
 	end
@@ -157,8 +233,8 @@ function GTTP:QUEST_PROGRESS()
 	end
 	
 	-- Alright! Complete
-	if( IsQuestCompletable() and self:IsAutoQuest(GetTitleText(), questList) ) then
-		QuestFrameCompleteButton:Click()
+	if( not IsShiftKeyDown() and IsQuestCompletable() and self:IsAutoQuest(GetTitleText(), questList) ) then
+		CompleteQuest()
 	end
 end
 
@@ -167,12 +243,22 @@ function GTTP:QUEST_COMPLETE()
 	local questName = string.lower(GetTitleText())
 	local data = GTTP_List[questName]
 	if( type(data) == "table" and data.checkItems ) then
-
 		data = true
 	end
 	
-	if( IsQuestCompletable() and GetNumQuestChoices() == 0 and self:IsAutoQuest(GetTitleText(), questList) ) then
-		QuestFrameCompleteQuestButton:Click()
+	if( not IsShiftKeyDown() and IsQuestCompletable() and GetNumQuestChoices() == 0 and self:IsAutoQuest(GetTitleText(), questList) ) then
+		if( QuestFrameRewardPanel.itemChoice == 0 and GetNumQuestChoices() > 0 ) then
+			QuestChooseRewardError()
+		else
+			PlaySound("igQuestListComplete")
+			GetQuestReward(QuestFrameRewardPanel.itemChoice)
+		end
+	end
+end
+
+function GTTP:QUEST_DETAIL()
+	if( not IsShiftKeyDown() and GTTP_Accept[string.lower(GetTitleText())] ) then
+		AcceptQuest()
 	end
 end
 
@@ -240,6 +326,7 @@ end
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("QUEST_PROGRESS")
 frame:RegisterEvent("QUEST_COMPLETE")
+frame:RegisterEvent("QUEST_DETAIL")
 frame:RegisterEvent("GOSSIP_SHOW")
 frame:RegisterEvent("ADDON_LOADED")
 frame:SetScript("OnEvent", function(self, event, addon)
