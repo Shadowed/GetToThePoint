@@ -20,9 +20,10 @@ local function stripStupid(text)
 	-- Strip [<level crap>] <quest title>
 	text = string.gsub(text, "%[(.+)%]", "")
 	-- Strip color codes
-	text = string.gsub(text, "|cff000000(.+)|r", "%1")
+	text = string.gsub(text, "|c[a-zA-Z0-9][a-zA-Z0-9][a-zA-Z0-9][a-zA-Z0-9][a-zA-Z0-9][a-zA-Z0-9][a-zA-Z0-9][a-zA-Z0-9](.+)|r", "%1")
 	-- Strip (low level) at the end of a quest
 	text = string.gsub(text, "(.+) %((.+)%)", "%1")
+	
 	return string.trim(text)
 end
 
@@ -75,28 +76,6 @@ function GTTP:Initialize()
 	end)
 end
 
---[[
-function GTTP:CombatText(text, color)	
-	-- SCT
-	if( IsAddOnLoaded("sct") ) then
-		SCT:DisplayText(text, color, nil, "event", 1)
-	
-	-- MSBT
-	elseif( IsAddOnLoaded("MikScrollingBattleText") ) then
-		MikSBT.DisplayMessage(text, MikSBT.DISPLAYTYPE_NOTIFICATION, false, color.r * 255, color.g * 255, color.b * 255)		
-	
-	-- Blizzard custom text
-	elseif( IsAddOnLoaded("Blizzard_CombatText") ) then
-		-- Haven't cached the movement function yet
-		if( not COMBAT_TEXT_SCROLL_FUNCTION ) then
-			CombatText_UpdateDisplayedMessages()
-		end
-		
-		CombatText_AddMessage(text, COMBAT_TEXT_SCROLL_FUNCTION, color.r, color.g, color.b)
-	end
-end
-]]
-
 -- Auto skip gossip
 local function gossipOnClick(self, ...)
 	-- Adding a new skip
@@ -104,6 +83,9 @@ local function gossipOnClick(self, ...)
 		-- If it already exists, remove it
 		local text = stripStupid(self:GetText())
 		local questName = string.lower(text)
+		
+		DevTools_Dump(self:GetText())
+		DevTools_Dump(text)
 		
 		if( GTTP_List[questName] ) then
 			if( self.type ~= "Gossip" ) then
