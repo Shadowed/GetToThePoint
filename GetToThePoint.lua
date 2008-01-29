@@ -83,10 +83,7 @@ local function gossipOnClick(self, ...)
 		-- If it already exists, remove it
 		local text = stripStupid(self:GetText())
 		local questName = string.lower(text)
-		
-		DevTools_Dump(self:GetText())
-		DevTools_Dump(text)
-		
+				
 		if( GTTP_List[questName] ) then
 			if( self.type ~= "Gossip" ) then
 				GTTP:Print(string.format(L["No longer auto turning in \"%s\"."], text))
