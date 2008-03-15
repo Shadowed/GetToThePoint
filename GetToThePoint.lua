@@ -15,6 +15,9 @@ local L = {
 	["Now auto turning in \"%s\". Hold ALT and click the option again to remove it."] = "Now auto turning in \"%s\". Hold ALT and click the option again to remove it.",
 }
 
+
+-- GTTP_List = Auto skip/turnin / GTTP_Accept = Auto accept
+
 -- Tries to deal with incompatabilities that other mods cause
 local function stripStupid(text)
 	-- Strip [<level crap>] <quest title>
@@ -52,7 +55,7 @@ function GTTP:Initialize()
 		GTTP_List = newList
 	end
 	
-	-- Hook for auto turnin
+	-- Hook for auto accpet
 	local orig_QuestAccept = QuestFrameAcceptButton:GetScript("OnClick")
 	QuestFrameAcceptButton:SetScript("OnClick", function(self, ...)
 		if( IsControlKeyDown() and GetTitleText() ) then
@@ -72,6 +75,28 @@ function GTTP:Initialize()
 
 		if( orig_QuestAccept ) then
 			orig_QuestAccept(self, ...)
+		end
+	end)
+	
+	-- Hook for auto turnin
+	local orig_QuestComplete = QuestFrameCompleteQuestButton:GetScript("OnClick")
+	QuestFrameCompleteQuestButton:SetScript("OnClick", function(self, ...)
+		if( IsAltKeyDown() and GetTitleText() ) then
+			local text = stripStupid(GetTitleText())
+			local questName = string.lower(text)
+			
+			if( GTTP_List[questName] ) then
+				GTTP_List[questName] = nil
+				GTTP:Print(string.format(L["No longer auto turning in \"%s\"."], text))
+			else
+				GTTP_List[questName] = {checkItems = true}
+				GTTP:Print(string.format(L["Now auto turning in \"%s\". Hold ALT and click the option again to remove it."], text))
+			end
+			return
+		end
+		
+		if( orig_QuestComplete ) then
+			orig_QuestComplete(self, ...)
 		end
 	end)
 end
@@ -212,7 +237,7 @@ function GTTP:QUEST_PROGRESS()
 	end
 	
 	-- Alright! Complete
-	if( not IsShiftKeyDown() and IsQuestCompletable() and self:IsAutoQuest(GetTitleText(), questList) ) then
+	if( not IsShiftKeyDown() and IsQuestCompletable() and self:IsAutoQuest(GetTitleText()) ) then
 		CompleteQuest()
 	end
 end
@@ -220,12 +245,11 @@ end
 function GTTP:QUEST_COMPLETE()
 	-- Unflag the quest as an item check so it can be auto completed
 	local questName = string.lower(GetTitleText())
-	local data = GTTP_List[questName]
-	if( type(data) == "table" and data.checkItems ) then
-		data = true
+	if( type(GTTP_List[questName]) == "table" and GTTP_List[questName].checkItems ) then
+		GTTP_List[questName] = true
 	end
-	
-	if( not IsShiftKeyDown() and IsQuestCompletable() and GetNumQuestChoices() == 0 and self:IsAutoQuest(GetTitleText(), questList) ) then
+		
+	if( not IsShiftKeyDown() and self:IsAutoQuest(GetTitleText()) ) then
 		if( QuestFrameRewardPanel.itemChoice == 0 and GetNumQuestChoices() > 0 ) then
 			QuestChooseRewardError()
 		else
