@@ -236,8 +236,14 @@ function GTTP:QUEST_PROGRESS()
 		GTTP_List[questName] = true
 	end
 	
+	for k in pairs(questList) do
+		questList[k] = nil
+	end
+	
+	questList[string.lower(stripStupid(GetTitleText()))] = true
+
 	-- Alright! Complete
-	if( not IsShiftKeyDown() and IsQuestCompletable() and self:IsAutoQuest(GetTitleText()) ) then
+	if( IsQuestCompletable() and self:IsAutoQuest(GetTitleText(), questList) ) then
 		CompleteQuest()
 	end
 end
@@ -249,7 +255,13 @@ function GTTP:QUEST_COMPLETE()
 		GTTP_List[questName] = true
 	end
 		
-	if( not IsShiftKeyDown() and self:IsAutoQuest(GetTitleText()) ) then
+	for k in pairs(questList) do
+		questList[k] = nil
+	end
+	
+	questList[string.lower(stripStupid(GetTitleText()))] = true
+
+	if( not IsShiftKeyDown() and self:IsAutoQuest(GetTitleText(), questList) ) then
 		if( QuestFrameRewardPanel.itemChoice == 0 and GetNumQuestChoices() > 0 ) then
 			QuestChooseRewardError()
 		else
@@ -289,7 +301,7 @@ function GTTP:IsAutoQuest(name, questList)
 		return nil
 	end
 	
-	name = string.lower(name)
+	name = stripStupid(string.lower(name))
 	
 	local data = GTTP_List[name]
 	if( not data ) then
@@ -340,7 +352,6 @@ function GTTP:IsAutoQuest(name, questList)
 		end
 	end
 	
-	-- Check sure it's completable if it's in our quest log
  	return true
 end
 
