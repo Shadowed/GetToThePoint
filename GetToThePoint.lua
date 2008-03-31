@@ -176,7 +176,7 @@ function GTTP:GOSSIP_SHOW()
 	
 	-- Now see what to auto skip
 	for name, button in pairs(questList) do
-		if( self:IsAutoQuest(name, questList) or (button.type == "Available" and GTTP_Accept[name]) ) then
+		if( ( self:IsAutoQuest(name, questList) and self:IsCompleted(name) ) or (button.type == "Available" and GTTP_Accept[name]) ) then
 			if( button.type == "Available" ) then
 				SelectGossipAvailableQuest(button:GetID())
 			elseif( button.type == "Active" ) then
@@ -265,8 +265,25 @@ function GTTP:QUEST_DETAIL()
 	end
 end
 
--- Figure out if it's an auto turn in quest
--- and if we can actually complete it
+-- Check if the quest has been completed yet
+function GTTP:IsCompleted(name)
+	for i=1, GetNumQuestLogEntries() do
+		local questName, _, _, _, _, _, isComplete = GetQuestLogTitle(i)
+		
+		if( name == stripStupid(string.lower(questName)) ) then
+			if( ( isComplete and isComplete > 0 ) or GetNumQuestLeaderBoards(i) == 0 ) then
+				return true
+			end
+			
+			return nil
+		end
+	end
+	
+	-- Default to completed if we don't have the quest
+	return true
+end
+
+-- Figure out if it's an auto turn in quest and if we can actually complete it
 function GTTP:IsAutoQuest(name, questList)
 	if( not name ) then
 		return nil
@@ -323,7 +340,8 @@ function GTTP:IsAutoQuest(name, questList)
 		end
 	end
 	
-	return true
+	-- Check sure it's completable if it's in our quest log
+ 	return true
 end
 
 local frame = CreateFrame("Frame")
