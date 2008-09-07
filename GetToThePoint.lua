@@ -2,9 +2,6 @@ local GTTP = {}
 local origClicks = {}
 local questList = {}
 
-local CT_SUPPORT = true
-local CT_COLOR = {r = 1.0, g = 0.47, b = 0.039}
-
 local L = {
 	["No longer auto turning in \"%s\"."] = "No longer auto turning in \"%s\".",
 	["No longer auto skipping \"%s\"."] = "No longer auto skipping \"%s\".",
@@ -23,7 +20,7 @@ local function stripStupid(text)
 	-- Strip [<level crap>] <quest title>
 	text = string.gsub(text, "%[(.+)%]", "")
 	-- Strip color codes
-	text = string.gsub(text, "|c[a-zA-Z0-9][a-zA-Z0-9][a-zA-Z0-9][a-zA-Z0-9][a-zA-Z0-9][a-zA-Z0-9][a-zA-Z0-9][a-zA-Z0-9](.+)|r", "%1")
+	text = string.gsub(text, "|c%x%x%x%x%x%x%x%x(.+)|r", "%1")
 	-- Strip (low level) at the end of a quest
 	text = string.gsub(text, "(.+) %((.+)%)", "%1")
 	
