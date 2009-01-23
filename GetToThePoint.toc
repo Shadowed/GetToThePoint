@@ -1,4 +1,4 @@
-## Interface: 20300
+## Interface: 30000
 ## Title: Get To The Point
 ## Notes: Helps automate gossip/quest/reputation options for auto turning in and skipping
 ## SavedVariables: GTTP_List, GTTP_Accept

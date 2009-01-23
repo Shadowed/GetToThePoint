@@ -40,17 +40,6 @@ function GTTP:Initialize()
 		GTTP_Accept = {}
 	end
 	
-	-- Upgrade
-	if( type(GTTP_List.manual) == "table" ) then
-		local newList = {}
-		for _, quests in pairs(GTTP_List) do
-			for name, data in pairs(quests) do
-				newList[name] = data
-			end
-		end
-		
-		GTTP_List = newList
-	end
 	
 	-- Hook for auto accpet
 	local orig_QuestAccept = QuestFrameAcceptButton:GetScript("OnClick")
@@ -74,6 +63,7 @@ function GTTP:Initialize()
 			orig_QuestAccept(self, ...)
 		end
 	end)
+	
 	
 	-- Hook for auto turnin
 	local orig_QuestComplete = QuestFrameCompleteQuestButton:GetScript("OnClick")
@@ -194,7 +184,7 @@ function GTTP:QUEST_PROGRESS()
 	end
 	
 	-- Check if we need to find items
-	local questName = string.lower(GetTitleText())
+	local questName = string.lower(string.trim(GetTitleText()))
 
 	-- It's got items, do we need to scan them?
 	if( GetNumQuestItems() > 0 ) then
@@ -247,7 +237,7 @@ end
 
 function GTTP:QUEST_COMPLETE()
 	-- Unflag the quest as an item check so it can be auto completed
-	local questName = string.lower(GetTitleText())
+	local questName = string.lower(string.trim(GetTitleText()))
 	if( type(GTTP_List[questName]) == "table" and GTTP_List[questName].checkItems ) then
 		GTTP_List[questName] = true
 	end
@@ -269,7 +259,7 @@ function GTTP:QUEST_COMPLETE()
 end
 
 function GTTP:QUEST_DETAIL()
-	if( not IsShiftKeyDown() and GTTP_Accept[string.lower(GetTitleText())] ) then
+	if( not IsShiftKeyDown() and GTTP_Accept[string.lower(string.trim(GetTitleText()))] ) then
 		AcceptQuest()
 	end
 end
@@ -360,7 +350,8 @@ frame:RegisterEvent("GOSSIP_SHOW")
 frame:RegisterEvent("ADDON_LOADED")
 frame:SetScript("OnEvent", function(self, event, addon)
 	if( event == "ADDON_LOADED" and addon == "GetToThePoint" ) then
-		GTTP.Initialize(GTTP)
+		GTTP:Initialize()
+		self:UnregisterEvent("ADDON_LOADED")
 	elseif( event ~= "ADDON_LOADED" ) then
 		GTTP[event](GTTP)
 	end
