@@ -1,6 +1,8 @@
-local GTTP = {}
+GTTP = {}
+
 local origClicks = {}
 local questList = {}
+local _G = getfenv(0)
 
 local L = {
 	["No longer auto turning in \"%s\"."] = "No longer auto turning in \"%s\".",
@@ -32,14 +34,8 @@ function GTTP:Print(msg)
 end
 
 function GTTP:Initialize()
-	if( not GTTP_List ) then
-		GTTP_List = {}
-	end
-	
-	if( not GTTP_Accept ) then
-		GTTP_Accept = {}
-	end
-	
+	GTTP_List = GTTP_List or {}
+	GTTP_Accept = GTTP_Accept or {}
 	
 	-- Hook for auto accpet
 	local orig_QuestAccept = QuestFrameAcceptButton:GetScript("OnClick")
@@ -76,7 +72,7 @@ function GTTP:Initialize()
 				GTTP_List[questName] = nil
 				GTTP:Print(string.format(L["No longer auto turning in \"%s\"."], text))
 			else
-				GTTP_List[questName] = {checkItems = true}
+				GTTP_List[questName] = {}
 				GTTP:Print(string.format(L["Now auto turning in \"%s\". Hold ALT and click the option again to remove it."], text))
 			end
 			return
@@ -113,7 +109,7 @@ local function gossipOnClick(self, ...)
 		-- It's not gossip, so it could possibly have item requirements
 		else
 			GTTP:Print(string.format(L["Now auto turning in \"%s\". Hold ALT and click the option again to remove it."], text))
-			GTTP_List[questName] = {checkItems = true}
+			GTTP_List[questName] = {}
 		end
 		
 		return
@@ -144,13 +140,11 @@ function GTTP:GOSSIP_SHOW()
 	end
 	
 	-- Recycle
-	for k in pairs(questList) do
-		questList[k] = nil
-	end
+	for k in pairs(questList) do questList[k] = nil end
 	
 	-- List all available quests
 	for i=1, GossipFrame.buttonIndex do
-		local button = getglobal("GossipTitleButton" .. i)		
+		local button = _G["GossipTitleButton" .. i]
 		if( not origClicks["GossipTitleButton" .. i] ) then
 			origClicks["GossipTitleButton" .. i] = button:GetScript("OnClick")
 			button:SetScript("OnClick", gossipOnClick)
@@ -189,8 +183,8 @@ function GTTP:QUEST_PROGRESS()
 	-- It's got items, do we need to scan them?
 	if( GetNumQuestItems() > 0 ) then
 		local data = GTTP_List[questName]
-		if( type(data) == "table" and data.checkItems ) then
-			local items
+		if( type(data) == "table" ) then
+			for k in pairs(GTTP_List[questName]) do GTTP_List[questName][k] = nil end
 			
 			-- Store how many we need, and the itemid for next time
 			-- technically, due to this way you have to complete the quest
@@ -200,21 +194,12 @@ function GTTP:QUEST_PROGRESS()
 				local itemLink = GetQuestItemLink("required", i)
 				if( itemLink ) then
 					local itemid = string.match(itemLink, "|c.+|Hitem:([0-9]+):(.+)|h%[(.+)%]|h|r")
-					
 					itemid = tonumber(itemid)
-					if( itemid ) then
-						if( not items ) then
-							items = {}
-						end
 
-						items[itemid] = select(3, GetQuestItemInfo("required", i))
+					if( itemid ) then
+						GTTP_List[questName][itemid] = select(3, GetQuestItemInfo("required", i))
 					end
 				end
-			end
-			
-			-- If we found no items...and it has items, something bad happened
-			if( items ) then
-				GTTP_List[questName] = items
 			end
 		end
 		
@@ -236,9 +221,16 @@ function GTTP:QUEST_PROGRESS()
 end
 
 function GTTP:QUEST_COMPLETE()
-	-- Unflag the quest as an item check so it can be auto completed
 	local questName = string.lower(string.trim(GetTitleText()))
-	if( type(GTTP_List[questName]) == "table" and GTTP_List[questName].checkItems ) then
+
+	-- Unflag the quest as an item check so it can be auto completed
+	local hasItem
+	for itemid in pairs(GTTP_List[questName]) do
+		hasItem = true
+		break
+	end
+	
+	if( not hasItem ) then
 		GTTP_List[questName] = true
 	end
 		
@@ -283,6 +275,11 @@ function GTTP:IsCompleted(name)
 end
 
 -- Figure out if it's an auto turn in quest and if we can actually complete it
+function GTTP:HasItems(list)
+	for itemid in pairs(list) do return true end
+	return nil
+end
+
 function GTTP:IsAutoQuest(name, questList)
 	if( not name ) then
 		return nil
@@ -298,17 +295,21 @@ function GTTP:IsAutoQuest(name, questList)
 	-- No item requirements, so can exit quickly
 	if( type(data) ~= "table" ) then
 		return true
-	
-	-- Need to check items still so don't auto complete
-	elseif( data.checkItems ) then
-		return nil
 	end
 
 	-- Make sure we have the items required for this quest
+	local hasItems
 	for itemid, quantity in pairs(data) do
+		hasItems = true
+		
 		if( GetItemCount(itemid) < quantity ) then
 			return nil
 		end
+	end
+	
+	-- Don't have item data yet but it's a table
+	if( not hasItems ) then
+		return nil
 	end
 
 	-- Alright, make sure we have enough items
@@ -319,7 +320,7 @@ function GTTP:IsAutoQuest(name, questList)
 	for name, data in pairs(GTTP_List) do
 		-- Make sure we aren't checking our own quest, that we have actual items
 		-- and that we either don't have a filter, or the quest is in the filter list
-		if( name ~= questName and type(data) == "table" and not data.checkItems and ( not questList or ( questList and questList[name] ) ) ) then
+		if( name ~= questName and type(data) == "table" and self:HasItems(data) and ( not questList or ( questList and questList[name] ) ) ) then
 			local required = 0
 			local found = 0
 
