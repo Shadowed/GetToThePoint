@@ -222,7 +222,8 @@ end
 
 function GTTP:QUEST_COMPLETE()
 	local questName = string.lower(string.trim(GetTitleText()))
-
+	if( not GTTP_List[questName] ) then return end
+	
 	-- Unflag the quest as an item check so it can be auto completed
 	local hasItem
 	for itemid in pairs(GTTP_List[questName]) do
