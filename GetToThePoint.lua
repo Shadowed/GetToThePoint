@@ -225,14 +225,16 @@ function GTTP:QUEST_COMPLETE()
 	if( not GTTP_List[questName] ) then return end
 	
 	-- Unflag the quest as an item check so it can be auto completed
-	local hasItem
-	for itemid in pairs(GTTP_List[questName]) do
-		hasItem = true
-		break
-	end
-	
-	if( not hasItem ) then
-		GTTP_List[questName] = true
+	if( type(GTTP_List[questName]) == "table" ) then
+		local hasItem
+		for itemid in pairs(GTTP_List[questName]) do
+			hasItem = true
+			break
+		end
+		
+		if( not hasItem ) then
+			GTTP_List[questName] = true
+		end
 	end
 		
 	for k in pairs(questList) do
